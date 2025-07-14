@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from tinkoff.invest.sandbox.client import SandboxClient
 import logging
+
 # from tinkoff.invest import exceptions
 # from tinkoff.invest import AccountType
 
@@ -72,3 +73,17 @@ class TinkoffSandboxClient:
                 logger.info(f"Информация о пользователе: {info}")
         except Exception as e:
             logger.exception(f"Ошибка при получении информации: {e}")
+
+
+class MarketDataClient:
+    def __init__(self, token):
+        self.token = token
+
+    def get_candles(self, figi, from_, to, interval):
+        with SandboxClient(self.token) as client:
+            return client.market_data.get_candles(
+                figi=figi,
+                from_=from_,
+                to=to,
+                interval=interval
+            ).candles

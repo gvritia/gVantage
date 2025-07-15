@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from tinkoff.invest.sandbox.client import SandboxClient
 import logging
-
+from tinkoff.invest import AsyncClient
 # from tinkoff.invest import exceptions
 # from tinkoff.invest import AccountType
 
@@ -78,12 +78,33 @@ class TinkoffSandboxClient:
 class MarketDataClient:
     def __init__(self, token):
         self.token = token
+        self.client = SandboxClient(self.token)  # Инициализация клиента здесь
 
     def get_candles(self, figi, from_, to, interval):
-        with SandboxClient(self.token) as client:
-            return client.market_data.get_candles(
+        # with SandboxClient(self.token) as client: # Удалить эту строку
+        return self.client.market_data.get_candles(  # Использовать self.client
+            figi=figi,
+            from_=from_,
+            to=to,
+            interval=interval
+        ).candles
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.client.__exit__(exc_type, exc_val, exc_tb)
+
+
+class AsyncMarketDataClient:
+    def __init__(self, token):
+        self.token = token
+
+    async def get_candles(self, figi, from_, to, interval):
+        async with AsyncClient(self.token) as client:
+            return (await client.market_data.get_candles(
                 figi=figi,
                 from_=from_,
                 to=to,
                 interval=interval
-            ).candles
+            )).candles

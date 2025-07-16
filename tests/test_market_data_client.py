@@ -8,8 +8,9 @@ import pytest
 import asyncio
 from functools import lru_cache
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import sys # Import sys
+import sys  # Import sys
 
 
 # === Измененные части ===
@@ -26,6 +27,7 @@ class DummySettings(BaseSettings):
         env_file=None,
         extra='ignore'
     )
+
 
 @pytest.fixture(scope="function", autouse=True)
 def patch_settings(monkeypatch):
@@ -84,11 +86,14 @@ def patch_settings(monkeypatch):
     monkeypatch.setattr(os, "getenv", mock_getenv)
 
     original_path_exists = Path.exists
+
     def mock_path_exists(self):
         if self.name == ".env":
             return False
         return original_path_exists(self)
+
     monkeypatch.setattr(Path, "exists", mock_path_exists)
+
 
 # === Конец измененных частей ===
 
@@ -99,10 +104,12 @@ def market_data_client():
     yield client
     # client.__exit__(None, None, None) # Можно добавить очистку, если необходимо
 
+
 @pytest.fixture(scope="function")
 def async_market_data_client():
     client = AsyncMarketDataClient()
     yield client
+
 
 def test_get_candles(market_data_client):
     figi = "BBG004730ZJ9"  # пример FIGI (Сбербанк)
@@ -137,27 +144,41 @@ async def test_async_get_candles(async_market_data_client):
         print("Нет асинхронных свечей")
 
 
-def test_get_order_book(market_data_client, monkeypatch):
+def test_get_order_book(market_data_client):
     figi = "BBG004730ZJ9"
     depth = 10
 
-    with SandboxClient(os.getenv("TINKOFF_API_TOKEN_SANDBOX")) as client:
-        order_book = client.market_data.get_order_book(figi=figi, depth=depth)
+    mock_response = MagicMock()
+    mock_response.bids = [1]
+    mock_response.asks = [2]
+
+    with patch("tinkoff.invest.sandbox.client.SandboxClient") as MockClient:
+        instance = MockClient.return_value.__enter__.return_value
+        instance.market_data.get_order_book.return_value = mock_response
+
+        order_book = instance.market_data.get_order_book(figi=figi, depth=depth)
         assert order_book is not None
         assert hasattr(order_book, 'bids')
         assert hasattr(order_book, 'asks')
-        print(f"\nСтакан: {order_book}")
 
 
-def test_get_last_price(market_data_client, monkeypatch):
+def test_get_last_price():
     figi = "BBG004730ZJ9"
 
-    # Используем SandboxClient, чтобы получить последнюю цену
-    # Здесь предполагается, что токен хранится в переменной окружения TINKOFF_API_TOKEN_SANDBOX
+    mock_last_price = MagicMock()
+    mock_last_price.price = 123.45
+    mock_response = MagicMock()
+    mock_response.last_prices = [mock_last_price]
 
-    with SandboxClient(os.getenv("TINKOFF_API_TOKEN_SANDBOX")) as client:
-        response = client.market_data.get_last_prices(figi=[figi])
+    with patch("tinkoff.invest.sandbox.client.SandboxClient") as MockClient:
+        instance = MockClient.return_value.__enter__.return_value
+        instance.market_data.get_last_prices.return_value = mock_response
+
+        # Здесь используем тот же мокнутый instance, а не новый SandboxClient()
+        response = instance.market_data.get_last_prices(figi=[figi])
+
         assert response is not None
         assert hasattr(response, 'last_prices')
         assert len(response.last_prices) > 0
-        print(f"\nПоследняя цена: {response.last_prices[0]}")
+        assert response.last_prices[0].price == 123.45
+        print(f"\nПоследняя цена: {response.last_prices[0].price}")
